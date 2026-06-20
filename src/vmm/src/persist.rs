@@ -157,6 +157,8 @@ pub enum CreateSnapshotError {
     SerializeMicrovmState(#[from] crate::snapshot::SnapshotError),
     /// Cannot perform {0} on the snapshot backing file: {1}
     SnapshotBackingFile(&'static str, io::Error),
+    /// Snapshotting a microVM with a VFIO passthrough device attached is not supported
+    VfioNotSupported,
 }
 
 /// Snapshot version
@@ -168,6 +170,13 @@ pub fn create_snapshot(
     vm_info: &VmInfo,
     params: &CreateSnapshotParams,
 ) -> Result<(), CreateSnapshotError> {
+    // The internal state of a physically assigned (VFIO passthrough) device lives in the hardware
+    // and cannot be captured, so reject snapshots while any such device is attached rather than
+    // silently producing an unrestorable snapshot.
+    if vmm.device_manager.pci_devices.has_vfio_devices() {
+        return Err(CreateSnapshotError::VfioNotSupported);
+    }
+
     let microvm_state = vmm
         .save_state(vm_info)
         .map_err(CreateSnapshotError::MicrovmState)?;

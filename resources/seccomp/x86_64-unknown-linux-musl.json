@@ -659,6 +659,227 @@
             },
             {
                 "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_GET_API_VERSION",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15204,
+                        "comment": "VFIO_GET_API_VERSION"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_CHECK_EXTENSION",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15205,
+                        "comment": "VFIO_CHECK_EXTENSION"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_SET_IOMMU",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15206,
+                        "comment": "VFIO_SET_IOMMU"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_GROUP_GET_STATUS",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15207,
+                        "comment": "VFIO_GROUP_GET_STATUS"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_GROUP_SET_CONTAINER",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15208,
+                        "comment": "VFIO_GROUP_SET_CONTAINER"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_GROUP_UNSET_CONTAINER",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15209,
+                        "comment": "VFIO_GROUP_UNSET_CONTAINER"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_GROUP_GET_DEVICE_FD",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15210,
+                        "comment": "VFIO_GROUP_GET_DEVICE_FD"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_DEVICE_GET_INFO",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15211,
+                        "comment": "VFIO_DEVICE_GET_INFO"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_DEVICE_GET_REGION_INFO",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15212,
+                        "comment": "VFIO_DEVICE_GET_REGION_INFO"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_DEVICE_GET_IRQ_INFO",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15213,
+                        "comment": "VFIO_DEVICE_GET_IRQ_INFO"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_DEVICE_SET_IRQS",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15214,
+                        "comment": "VFIO_DEVICE_SET_IRQS"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_DEVICE_RESET",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15215,
+                        "comment": "VFIO_DEVICE_RESET"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_IOMMU_GET_INFO",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15216,
+                        "comment": "VFIO_IOMMU_GET_INFO"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_IOMMU_MAP_DMA",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15217,
+                        "comment": "VFIO_IOMMU_MAP_DMA"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: VFIO_IOMMU_UNMAP_DMA",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 15218,
+                        "comment": "VFIO_IOMMU_UNMAP_DMA"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: KVM_CREATE_DEVICE",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 3222056672,
+                        "comment": "KVM_CREATE_DEVICE"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
+                "comment": "VFIO passthrough: KVM_SET_DEVICE_ATTR",
+                "args": [
+                    {
+                        "index": 1,
+                        "type": "dword",
+                        "op": "eq",
+                        "val": 1075359457,
+                        "comment": "KVM_SET_DEVICE_ATTR"
+                    }
+                ]
+            },
+            {
+                "syscall": "ioctl",
                 "comment": "Needed for opening tap device during net hotplug",
                 "args": [
                     {
