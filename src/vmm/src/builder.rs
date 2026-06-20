@@ -53,6 +53,7 @@ use crate::vmm_config::instance_info::{InstanceInfo, VmState};
 use crate::vmm_config::machine_config::MachineConfigError;
 use crate::vmm_config::memory_hotplug::MemoryHotplugConfig;
 use crate::vmm_config::pmem::PmemConfig;
+use crate::vmm_config::vfio::VfioDeviceConfig;
 use crate::vstate::kvm::{Kvm, KvmError};
 use crate::vstate::memory::GuestRegionMmap;
 #[cfg(target_arch = "aarch64")]
@@ -257,6 +258,7 @@ pub fn build_microvm_for_boot(
         &vm_resources.pmem.configs,
         event_manager,
     )?;
+    attach_vfio_devices(&mut device_manager, &vm, &vm_resources.vfio.configs)?;
 
     if let Some(unix_vsock) = vm_resources.vsock.get() {
         attach_unixsock_vsock_device(
@@ -735,6 +737,21 @@ fn attach_pmem_devices(
         let device = Arc::new(Mutex::new(pmem));
 
         device_manager.attach_virtio_device(vm, id, device, cmdline, event_manager, false)?;
+    }
+    Ok(())
+}
+
+fn attach_vfio_devices(
+    device_manager: &mut DeviceManager,
+    vm: &Vm,
+    configs: &[VfioDeviceConfig],
+) -> Result<(), StartMicrovmError> {
+    for config in configs {
+        device_manager.attach_vfio_device(
+            vm,
+            config.id.clone(),
+            std::path::Path::new(&config.path),
+        )?;
     }
     Ok(())
 }

@@ -158,6 +158,7 @@ use crate::vmm_config::machine_config::MachineConfig;
 use crate::vmm_config::memory_hotplug::MemoryHotplugConfig;
 use crate::vmm_config::mmds::MmdsConfig;
 use crate::vmm_config::net::NetworkInterfaceConfig;
+use crate::vmm_config::vfio::VfioDeviceConfig;
 use crate::vmm_config::vsock::VsockDeviceConfig;
 pub use crate::vstate::kvm::Kvm;
 use crate::vstate::memory::{GuestMemory, GuestMemoryMmap, GuestMemoryRegion};
@@ -410,6 +411,20 @@ impl Vmm {
             }
         });
 
+        let vfio_devices: Vec<VfioDeviceConfig> = self
+            .device_manager
+            .pci_devices
+            .vfio_devices
+            .values()
+            .map(|dev| {
+                let dev = dev.lock().expect("Poisoned lock");
+                VfioDeviceConfig {
+                    id: dev.id().to_string(),
+                    path: dev.sysfs_path().to_string_lossy().into_owned(),
+                }
+            })
+            .collect();
+
         // This must match the From<&VmResources> for VmmConfig implementation
         // in resources.rs which is used to retrieve the config before the VM
         // is started.
@@ -426,6 +441,7 @@ impl Vmm {
             vsock,
             entropy,
             pmem_devices: pmem,
+            vfio_devices,
             // serial_config is marked serde(skip) so that it doesnt end up in snapshots
             serial_config: None,
             memory_hotplug,

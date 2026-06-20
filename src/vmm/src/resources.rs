@@ -31,6 +31,7 @@ use crate::vmm_config::mmds::{MmdsConfig, MmdsConfigError};
 use crate::vmm_config::net::*;
 use crate::vmm_config::pmem::{PmemBuilder, PmemConfig, PmemConfigError};
 use crate::vmm_config::serial::SerialConfig;
+use crate::vmm_config::vfio::{VfioBuilder, VfioConfigError, VfioDeviceConfig};
 use crate::vmm_config::vsock::*;
 use crate::vstate::memory;
 use crate::vstate::memory::{GuestRegionMmap, MemoryError};
@@ -66,6 +67,8 @@ pub enum ResourcesError {
     EntropyConfig(#[from] EntropyDeviceError),
     /// Pmem device error: {0}
     PmemConfig(#[from] PmemConfigError),
+    /// VFIO device error: {0}
+    VfioConfig(#[from] VfioConfigError),
     /// Memory hotplug config error: {0}
     MemoryHotplugConfig(#[from] MemoryHotplugConfigError),
 }
@@ -97,6 +100,8 @@ pub struct VmmConfig {
     pub entropy: Option<EntropyDeviceConfig>,
     #[serde(default, rename = "pmem")]
     pub pmem_devices: Vec<PmemConfig>,
+    #[serde(default, rename = "vfio")]
+    pub vfio_devices: Vec<VfioDeviceConfig>,
     #[serde(skip)]
     pub serial_config: Option<SerialConfig>,
     pub memory_hotplug: Option<MemoryHotplugConfig>,
@@ -122,6 +127,8 @@ pub struct VmResources {
     pub entropy: EntropyDeviceBuilder,
     /// The pmem device configs.
     pub pmem: PmemBuilder,
+    /// The VFIO passthrough device configs.
+    pub vfio: VfioBuilder,
     /// The memory hotplug configuration.
     pub memory_hotplug: Option<MemoryHotplugConfig>,
     /// The optional Mmds data store.
@@ -228,6 +235,10 @@ impl VmResources {
 
         for pmem_config in vmm_config.pmem_devices.into_iter() {
             resources.build_pmem_device(pmem_config)?;
+        }
+
+        for vfio_config in vmm_config.vfio_devices.into_iter() {
+            resources.build_vfio_device(vfio_config)?;
         }
 
         if let Some(serial_cfg) = vmm_config.serial_config {
@@ -394,6 +405,14 @@ impl VmResources {
         self.pmem.build(body, has_block_root)
     }
 
+    /// Adds a VFIO passthrough device to be attached when the VM starts.
+    ///
+    /// PCIe support (`--enable-pci`) is required for passthrough; the device is only attached at
+    /// boot, and only if PCI is enabled.
+    pub fn build_vfio_device(&mut self, body: VfioDeviceConfig) -> Result<(), VfioConfigError> {
+        self.vfio.insert(body)
+    }
+
     /// Sets the memory hotplug configuration.
     pub fn set_memory_hotplug_config(
         &mut self,
@@ -550,6 +569,7 @@ impl From<&VmResources> for VmmConfig {
             vsock: resources.vsock.config(),
             entropy: resources.entropy.config(),
             pmem_devices: resources.pmem.configs.clone(),
+            vfio_devices: resources.vfio.configs.clone(),
             // serial_config is marked serde(skip) so that it doesnt end up in snapshots.
             serial_config: None,
             memory_hotplug: resources.memory_hotplug.clone(),
@@ -661,6 +681,7 @@ mod tests {
             mmds_size_limit: HTTP_MAX_PAYLOAD_SIZE,
             entropy: Default::default(),
             pmem: Default::default(),
+            vfio: Default::default(),
             pci_enabled: false,
             serial_out_path: None,
             serial_rate_limiter_cfg: None,

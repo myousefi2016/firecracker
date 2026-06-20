@@ -4,6 +4,7 @@
 use std::collections::HashMap;
 use std::fmt::Debug;
 use std::ops::DerefMut;
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use event_manager::{MutEventSubscriber, SubscriberOps};
@@ -13,6 +14,8 @@ use super::persist::MmdsState;
 use crate::EventManager;
 use crate::device_manager::DevicePersistError;
 use crate::devices::pci::PciSegment;
+use crate::devices::vfio::pci::{VfioPciDevice, VfioPciError};
+use crate::devices::vfio::{VfioError, VfioPciResources};
 use crate::devices::virtio::balloon::Balloon;
 use crate::devices::virtio::balloon::persist::{BalloonConstructorArgs, BalloonState};
 use crate::devices::virtio::block::device::Block;
@@ -50,6 +53,8 @@ pub struct PciDevices {
     pub pci_segment: Option<PciSegment>,
     /// All VirtIO PCI devices of the system
     pub virtio_devices: HashMap<VirtioDeviceId, Arc<Mutex<VirtioPciDevice>>>,
+    /// All VFIO passthrough PCI devices of the system, keyed by their Firecracker id.
+    pub vfio_devices: HashMap<String, Arc<Mutex<VfioPciDevice>>>,
 }
 
 #[derive(Debug, thiserror::Error, displaydoc::Display)]
@@ -66,6 +71,10 @@ pub enum PciManagerError {
     VirtioPciDevice(#[from] VirtioPciDeviceError),
     /// KVM error: {0}
     Kvm(#[from] vmm_sys_util::errno::Error),
+    /// VFIO error: {0}
+    Vfio(#[from] VfioError),
+    /// VFIO PCI device error: {0}
+    VfioPci(#[from] VfioPciError),
 }
 
 impl PciDevices {
@@ -172,6 +181,68 @@ impl PciDevices {
         let virtio_device = Arc::new(Mutex::new(virtio_device));
 
         self.attach_common(vm, device_type, id, sbdf, virtio_device, event_manager)
+    }
+
+    /// Attach a VFIO passthrough PCI device, identified by the host sysfs path of the assigned
+    /// function (e.g. `/sys/bus/pci/devices/0000:01:00.0`).
+    pub(crate) fn attach_pci_vfio_device(
+        &mut self,
+        vm: &Arc<KvmVm>,
+        id: String,
+        sysfs_path: &Path,
+    ) -> Result<(), PciManagerError> {
+        // Allocate the guest SBDF for the device in a scoped borrow so we can mutate `self` again
+        // below.
+        let sbdf = {
+            let pci_segment = self.pci_segment.as_ref().unwrap();
+            let sbdf = pci_segment.next_device_sbdf()?;
+            debug!("Allocating SBDF: {sbdf:?} for VFIO device {id}");
+            sbdf
+        };
+
+        // Open the VFIO device, couple it to KVM and map guest memory for DMA.
+        let resources = VfioPciResources::new(vm, sysfs_path)?;
+
+        // Size the MSI-X vector group to the device's MSI-X table.
+        let msix_num = VfioPciDevice::required_msix_vectors(&resources.device)
+            .ok_or(VfioPciError::MissingMsix)?;
+        let msix_vectors = KvmVm::create_msix_group(vm.clone(), msix_num)?;
+
+        let mut vfio_device =
+            VfioPciDevice::new(id.clone(), sbdf, resources, Arc::new(msix_vectors))?;
+        vfio_device.allocate_and_map_bars(vm)?;
+
+        // The ranges that must be trapped on the MMIO bus (MSI-X table/PBA and any BAR areas that
+        // could not be mapped directly).
+        let trapped = vfio_device.trapped_bus_ranges();
+
+        let vfio_device = Arc::new(Mutex::new(vfio_device));
+
+        // Make the device reachable through PCI configuration space.
+        {
+            let pci_segment = self.pci_segment.as_ref().unwrap();
+            pci_segment
+                .pci_bus
+                .lock()
+                .expect("Poisoned lock")
+                .add_device(sbdf.device(), vfio_device.clone())?;
+        }
+
+        // Trap the relevant BAR ranges so MSI-X table accesses and non-mappable MMIO reach the
+        // device's emulation.
+        for (base, len) in trapped {
+            debug!("vfio: trapping BAR range {base:#x}:{len:#x} on the MMIO bus");
+            vm.common.mmio_bus.insert(vfio_device.clone(), base, len)?;
+        }
+
+        self.vfio_devices.insert(id, vfio_device);
+
+        Ok(())
+    }
+
+    /// Whether any VFIO passthrough device is currently attached.
+    pub fn has_vfio_devices(&self) -> bool {
+        !self.vfio_devices.is_empty()
     }
 
     fn restore_pci_device<T: 'static + VirtioDevice + MutEventSubscriber + Debug>(

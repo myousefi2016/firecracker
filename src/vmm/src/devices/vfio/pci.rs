@@ -233,6 +233,11 @@ impl VfioPciDevice {
         &self.id
     }
 
+    /// The host sysfs path of the assigned device.
+    pub fn sysfs_path(&self) -> &std::path::Path {
+        &self.resources.path
+    }
+
     /// Number of MSI-X vectors the device requires, as reported by its MSI-X capability.
     ///
     /// Returns `None` if the device has no MSI-X capability.

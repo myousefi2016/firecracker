@@ -103,6 +103,8 @@ pub enum AttachDeviceError {
     PciTransport(#[from] PciManagerError),
     /// Operation not supported on this VM type
     NotSupported,
+    /// VFIO passthrough requires the PCIe transport to be enabled (--enable-pci)
+    PciNotEnabled,
 }
 
 #[derive(Debug, thiserror::Error, displaydoc::Display)]
@@ -303,6 +305,28 @@ impl DeviceManager {
             )?;
         }
 
+        Ok(())
+    }
+
+    /// Attaches a VFIO passthrough PCI device to the VM.
+    ///
+    /// Passthrough requires the PCIe transport to be enabled (`--enable-pci`); otherwise the
+    /// request is rejected.
+    pub(crate) fn attach_vfio_device(
+        &mut self,
+        vm: &Vm,
+        id: String,
+        sysfs_path: &std::path::Path,
+    ) -> Result<(), AttachDeviceError> {
+        let kvm_vm = vm
+            .as_kvm()
+            .cloned()
+            .ok_or(AttachDeviceError::NotSupported)?;
+        if !self.is_pci_enabled() {
+            return Err(AttachDeviceError::PciNotEnabled);
+        }
+        self.pci_devices
+            .attach_pci_vfio_device(&kvm_vm, id, sysfs_path)?;
         Ok(())
     }
 
