@@ -114,6 +114,26 @@ impl Bars {
         self.bars[(bar_idx + 1) as usize].encoded_addr = addr_hi;
         self.bars[(bar_idx + 1) as usize].encoded_size = size_hi;
     }
+    /// Set a single BAR slot as a 32bit memory bar
+    pub fn set_bar_32(&mut self, bar_idx: u8, addr: u64, size: u64, prefetchable: BarPrefetchable) {
+        assert_ne!(size, 0);
+        assert!(size.is_power_of_two());
+        assert!(addr & 0b1111 == 0);
+        // A 32bit BAR must fit entirely within the 32bit address space.
+        assert!(addr + size <= u64::from(u32::MAX) + 1);
+        assert!(bar_idx < NUM_BAR_REGS);
+
+        // Unused BARs will have address and size of 0
+        assert_eq!(self.bars[bar_idx as usize].encoded_addr, 0);
+        assert_eq!(self.bars[bar_idx as usize].encoded_size, 0);
+
+        let size_lo = (!(size - 1) & 0xffff_ffff) as u32;
+        let addr_lo = (addr & 0xffff_fff0) as u32;
+        let prefetchable = (prefetchable as u32) << 3;
+        // Type bits 0b00 indicate a 32bit memory BAR.
+        self.bars[bar_idx as usize].encoded_addr = addr_lo | prefetchable;
+        self.bars[bar_idx as usize].encoded_size = size_lo;
+    }
     /// Get the address of the 64bit bar
     pub fn get_bar_addr_64(&self, bar_idx: u8) -> u64 {
         assert!(bar_idx < NUM_BAR_REGS - 1);

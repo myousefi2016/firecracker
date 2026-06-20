@@ -16,7 +16,9 @@
 //!   guest RAM.
 //!
 //! The higher level PCI emulation (configuration space, BARs and MSI-X) that turns a
-//! [`VfioDevice`] into a device the guest can drive lives in `pci`.
+//! [`VfioDevice`] into a device the guest can drive lives in [`pci`].
+
+pub mod pci;
 
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
