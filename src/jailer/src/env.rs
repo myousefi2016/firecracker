@@ -5,6 +5,7 @@ use std::ffi::{CStr, CString, OsString};
 use std::fs::{self, File, OpenOptions, Permissions, canonicalize, read_to_string};
 use std::io;
 use std::io::Write;
+use std::os::unix::ffi::OsStrExt;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt, fchown};
 use std::os::unix::io::AsRawFd;
 use std::os::unix::process::CommandExt;
@@ -131,6 +132,9 @@ pub struct Env {
     cgroup_conf: Option<CgroupConfiguration>,
     resource_limits: ResourceLimits,
     uffd_dev_minor: Option<u32>,
+    // VFIO character device nodes to recreate inside the chroot, as
+    // (absolute path, major, minor) triples.
+    vfio_dev_nodes: Vec<(PathBuf, u32, u32)>,
 }
 
 impl Env {
@@ -254,6 +258,13 @@ impl Env {
 
         let uffd_dev_minor = Self::get_userfaultfd_minor_dev_number().ok();
 
+        let vfio_args: &[String] = arguments.multiple_values("vfio-device").unwrap_or_default();
+        let vfio_dev_nodes = if vfio_args.is_empty() {
+            Vec::new()
+        } else {
+            Self::resolve_vfio_dev_nodes(vfio_args)?
+        };
+
         Ok(Env {
             id: id.to_owned(),
             chroot_dir,
@@ -270,7 +281,64 @@ impl Env {
             cgroup_conf,
             resource_limits,
             uffd_dev_minor,
+            vfio_dev_nodes,
         })
+    }
+
+    // Decompose a `dev_t` into its (major, minor) parts using the glibc encoding, which is what
+    // `libc::makedev` (used by `mknod_and_own_dev`) expects.
+    //
+    // The casts are intentionally truncating: glibc computes each component in 32 bits.
+    #[allow(clippy::cast_possible_truncation)]
+    fn major_minor(dev: u64) -> (u32, u32) {
+        let major = (((dev >> 8) & 0xfff) as u32) | ((dev >> 32) as u32 & !0xfffu32);
+        let minor = ((dev & 0xff) as u32) | (((dev >> 12) as u32) & !0xffu32);
+        (major, minor)
+    }
+
+    // Look up the (major, minor) device numbers of a character device on the host.
+    fn host_dev_numbers(path: &Path) -> Result<(u32, u32), JailerError> {
+        let metadata =
+            fs::metadata(path).map_err(|err| JailerError::Metadata(path.to_path_buf(), err))?;
+        Ok(Self::major_minor(metadata.rdev()))
+    }
+
+    // Resolve the set of VFIO character device nodes that must be exposed inside the chroot for the
+    // given list of host PCI device sysfs paths: the shared `/dev/vfio/vfio` container plus the
+    // `/dev/vfio/<group>` node of every distinct IOMMU group involved.
+    fn resolve_vfio_dev_nodes(
+        sysfs_paths: &[String],
+    ) -> Result<Vec<(PathBuf, u32, u32)>, JailerError> {
+        let mut nodes = Vec::new();
+
+        let container = PathBuf::from("/dev/vfio/vfio");
+        let (major, minor) = Self::host_dev_numbers(&container)?;
+        nodes.push((container, major, minor));
+
+        let mut seen_groups = std::collections::HashSet::new();
+        for sysfs_path in sysfs_paths {
+            let group_link = Path::new(sysfs_path).join("iommu_group");
+            let group_target = fs::read_link(&group_link).map_err(|err| {
+                JailerError::VfioDevice(format!("cannot read {group_link:?}: {err}"))
+            })?;
+            let group = group_target
+                .file_name()
+                .and_then(|name| name.to_str())
+                .ok_or_else(|| {
+                    JailerError::VfioDevice(format!("invalid IOMMU group for {sysfs_path}"))
+                })?
+                .to_owned();
+
+            if !seen_groups.insert(group.clone()) {
+                continue;
+            }
+
+            let group_node = PathBuf::from(format!("/dev/vfio/{group}"));
+            let (major, minor) = Self::host_dev_numbers(&group_node)?;
+            nodes.push((group_node, major, minor));
+        }
+
+        Ok(nodes)
     }
 
     pub fn chroot_dir(&self) -> &Path {
@@ -705,6 +773,17 @@ impl Env {
         // Expose the device in the jailed environment.
         if let Some(minor) = self.uffd_dev_minor {
             self.mknod_and_own_dev(DEV_UFFD_PATH, DEV_UFFD_MAJOR, minor)?;
+        }
+
+        // Expose the VFIO character devices (the container and the relevant IOMMU group nodes)
+        // inside the chroot, so a jailed Firecracker can assign the host PCI devices through VFIO.
+        if !self.vfio_dev_nodes.is_empty() {
+            self.setup_jailed_folder("/dev/vfio")?;
+            for (path, major, minor) in &self.vfio_dev_nodes {
+                let dev_path = CString::new(path.as_os_str().as_bytes())
+                    .map_err(JailerError::CStringParsing)?;
+                self.mknod_and_own_dev(&dev_path, *major, *minor)?;
+            }
         }
 
         self.jailer_cpu_time_us = get_time_us(ClockType::ProcessCpu) - self.start_time_cpu_us;

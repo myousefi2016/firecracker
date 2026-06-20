@@ -102,6 +102,8 @@ pub enum JailerError {
     MkdirOldRoot(io::Error),
     #[error("Failed to create {1} via mknod inside the jail: {0}")]
     MknodDev(io::Error, String),
+    #[error("Failed to set up VFIO passthrough device: {0}")]
+    VfioDevice(String),
     #[error("Failed to bind mount the jail root directory: {0}")]
     MountBind(io::Error),
     #[error("Failed to change the propagation type to slave: {0}")]
@@ -225,6 +227,17 @@ pub fn build_arg_parser() -> ArgParser<'static> {
             Argument::new("parent-cgroup")
                 .takes_value(true)
                 .help("Parent cgroup in which the cgroup of this microvm will be placed."),
+        )
+        .arg(
+            Argument::new("vfio-device")
+                .takes_value(true)
+                .allow_multiple(true)
+                .help(
+                    "Host sysfs path of a PCI device to expose to the jailed process for VFIO \
+                     passthrough (e.g. /sys/bus/pci/devices/0000:01:00.0). The matching \
+                     /dev/vfio/vfio and /dev/vfio/<group> nodes are created inside the chroot. \
+                     May be specified multiple times.",
+                ),
         )
         .arg(
             Argument::new("version")
