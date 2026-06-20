@@ -15,7 +15,39 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: "Check Cargo.lock not in changeset" 
+      - name: "Check only allowlisted dependencies changed"
         run: |
-          git fetch origin
-          git diff origin/$GITHUB_BASE_REF.. --name-only| ( ! grep "Cargo.lock")
+          git fetch origin "$GITHUB_BASE_REF"
+
+          # Crates that are explicitly allowed to be added, removed or version
+          # bumped. New entries here are a deliberate, reviewed supply-chain
+          # decision. Everything else must keep Cargo.lock unchanged so that
+          # accidental dependency drift is still caught.
+          #
+          # vfio-ioctls / vfio-bindings: required for VFIO based PCIe device
+          # passthrough. kvm-ioctls / kvm-bindings: pulled to a single, coherent
+          # version compatible with vfio-ioctls.
+          ALLOWLIST="vfio-ioctls vfio-bindings kvm-ioctls kvm-bindings"
+
+          # Extract the sorted set of "name version" pairs from a Cargo.lock.
+          pkgs() {
+            awk '/^name = /{n=$3} /^version = /{print n, $3}' "$1" | sort
+          }
+
+          git show "origin/$GITHUB_BASE_REF:Cargo.lock" > /tmp/base-Cargo.lock
+
+          # Names of crates whose (name, version) pair was added or removed.
+          changed=$(diff <(pkgs /tmp/base-Cargo.lock) <(pkgs Cargo.lock) \
+            | grep -E '^[<>]' | awk '{print $2}' | tr -d '"' | sort -u)
+
+          status=0
+          for pkg in $changed; do
+            case " $ALLOWLIST " in
+              *" $pkg "*) ;;
+              *)
+                echo "Unexpected dependency change for crate: $pkg"
+                status=1
+                ;;
+            esac
+          done
+          exit $status
