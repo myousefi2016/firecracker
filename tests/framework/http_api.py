@@ -198,5 +198,6 @@ class Api:
         self.cpu_config = Resource(self, "/cpu-config")
         self.entropy = Resource(self, "/entropy")
         self.pmem = Resource(self, "/pmem", "id")
+        self.vfio = Resource(self, "/vfio", "id")
         self.serial = Resource(self, "/serial")
         self.memory_hotplug = Resource(self, "/hotplug/memory")
